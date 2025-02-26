@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atai-web-tool"
-version = "0.0.2"
-description = "Extract the main content from a webpage using zendriver, readability-lxml, and BeautifulSoup."
+version = "0.0.6"
+description = "Extract the main content from a webpage using Playwright, readability-lxml, and BeautifulSoup."
 readme = "README.md"
 authors = [
   { name = "AtomGradient", email = "alex@atomgradient.com" }
@@ -17,7 +17,7 @@ classifiers = [
 ]
 requires-python = ">=3.6"
 dependencies = [
-  "zendriver",
+  "playwright",
   "readability-lxml",
   "beautifulsoup4",
   "lxml[html_clean]"
