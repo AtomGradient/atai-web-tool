@@ -43,8 +43,7 @@ env/
 *.sublime-project
 
 # Project specific
-llm-combined-files.txt
-*.txt
+llm-context-files.txt
 
 # Mac OS
 .DS_Store
