@@ -1,9 +1,12 @@
 import argparse
 import asyncio
 import sys
+import random
 from playwright.async_api import async_playwright
 from readability import Document
 from bs4 import BeautifulSoup
+from atai_web_tool.user_agents import USER_AGENTS
+
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -19,29 +22,51 @@ async def extract_content(url: str, headless: bool, no_sandbox: bool) -> str:
     async with async_playwright() as p:
         args = ["--no-sandbox"] if no_sandbox else []
         browser = await p.chromium.launch(headless=headless, args=args)
-        page = await browser.new_page()
-
-        # Block non-essential resources (images, stylesheets, fonts) for faster loading.
-        await page.route("**/*", lambda route, request: 
-            route.abort() if request.resource_type in ["image", "stylesheet", "font"] else route.continue_()
+        
+        # Create a context with a realistic user agent
+        random_user_agent = random.choice(USER_AGENTS)
+        context = await browser.new_context(
+            user_agent=random_user_agent
         )
+        page = await context.new_page()
 
-        # Navigate to the URL and wait until the DOM content is loaded, with a shorter timeout.
-        await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        # Only block images and fonts, allow JavaScript and stylesheets
+        await page.route("**/*.{png,jpg,jpeg,gif,webp,svg}", lambda route: route.abort())
+        await page.route("**/*.{woff,woff2,ttf,otf,eot}", lambda route: route.abort())
+
+        try:
+            # Navigate to the URL and wait until network is idle (most resources loaded)
+            await page.goto(url, wait_until="networkidle", timeout=30000)
+            
+            # Additional wait to allow JavaScript to execute
+            await page.wait_for_timeout(2000)
+            
+            # Get the content properly with await
+            html_content = await page.content()
+            
+            # Check if we need to bypass any protection
+            if "Enable JavaScript and cookies to continue" in html_content:
+                # Try to find and click any "Continue" buttons
+                try:
+                    await page.click('text="Continue"', timeout=3000)
+                    await page.wait_for_timeout(2000)
+                    # Get updated content after clicking
+                    html_content = await page.content()
+                except:
+                    pass
+            
+            # Use readability-lxml to extract the main content HTML
+            doc = Document(html_content)
+            main_html = doc.summary()
+            
+            # Clean the HTML to get plain text
+            soup = BeautifulSoup(main_html, "html.parser")
+            main_text = soup.get_text(separator="\n", strip=True)
+            
+            return main_text
         
-        # Retrieve the full HTML content of the page.
-        raw_html = await page.content()
-        
-        # Use readability-lxml to extract the main content HTML.
-        doc = Document(raw_html)
-        main_html = doc.summary()
-        
-        # Clean the HTML to get plain text.
-        soup = BeautifulSoup(main_html, "html.parser")
-        main_text = soup.get_text(separator="\n", strip=True)
-        
-        await browser.close()
-        return main_text
+        finally:
+            await browser.close()
 
 def main():
     parser = argparse.ArgumentParser(
