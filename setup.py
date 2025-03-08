@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="atai-web-tool",
-    version="0.0.8",
+    version="0.0.9",
     description="Extract the main content from a webpage using Playwright, readability-lxml, and BeautifulSoup.",
     author="AtomGradient",
     author_email="alex@atomgradient.com",
@@ -12,7 +12,8 @@ setup(
         "playwright",
         "readability-lxml",
         "beautifulsoup4",
-        "lxml[html_clean]"
+        "lxml[html_clean]",
+        "newspaper4k"
     ],
     entry_points={
         "console_scripts": [

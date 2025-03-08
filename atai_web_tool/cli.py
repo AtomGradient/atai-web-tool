@@ -6,7 +6,7 @@ from playwright.async_api import async_playwright
 from readability import Document
 from bs4 import BeautifulSoup
 from atai_web_tool.user_agents import USER_AGENTS
-
+import newspaper
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -18,60 +18,72 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-async def extract_content(url: str, headless: bool, no_sandbox: bool) -> str:
+def extract_with_newspaper(url: str) -> str:
+    try:
+        # Create an article instance and download it
+        article = newspaper.article(url)
+        article.download()
+        article.parse()
+        content = article.text.strip()
+        if content and len(content) > 150:
+            return content
+    except Exception as e:
+        # Optionally log the exception e
+        pass
+    return ""
+
+async def extract_with_playwright(url: str, headless: bool, no_sandbox: bool) -> str:
     async with async_playwright() as p:
         args = ["--no-sandbox"] if no_sandbox else []
         browser = await p.chromium.launch(headless=headless, args=args)
         
         # Create a context with a realistic user agent
         random_user_agent = random.choice(USER_AGENTS)
-        context = await browser.new_context(
-            user_agent=random_user_agent
-        )
+        context = await browser.new_context(user_agent=random_user_agent)
         page = await context.new_page()
 
-        # Only block images and fonts, allow JavaScript and stylesheets
+        # Block images and fonts
         await page.route("**/*.{png,jpg,jpeg,gif,webp,svg}", lambda route: route.abort())
         await page.route("**/*.{woff,woff2,ttf,otf,eot}", lambda route: route.abort())
 
         try:
-            # Navigate to the URL and wait until network is idle (most resources loaded)
-            # Change networkidle to load
+            # Navigate to the URL and wait until the page loads
             await page.goto(url, wait_until="load", timeout=60000)
-            
-            # Additional wait to allow JavaScript to execute
             await page.wait_for_timeout(2000)
-            
-            # Get the content properly with await
             html_content = await page.content()
             
-            # Check if we need to bypass any protection
+            # Handle any potential protection pages
             if "Enable JavaScript and cookies to continue" in html_content:
-                # Try to find and click any "Continue" buttons
                 try:
-                    await page.click('text="Continue"', timeout=3000)
+                    # await page.click('text="Continue"', timeout=3000)
                     await page.wait_for_timeout(2000)
-                    # Get updated content after clicking
                     html_content = await page.content()
                 except:
                     pass
             
-            # Use readability-lxml to extract the main content HTML
+            # Use readability-lxml to extract the main HTML content
             doc = Document(html_content)
             main_html = doc.summary()
             
             # Clean the HTML to get plain text
             soup = BeautifulSoup(main_html, "html.parser")
             main_text = soup.get_text(separator="\n", strip=True)
-            
             return main_text
         
         finally:
             await browser.close()
 
+async def extract_content(url: str, headless: bool, no_sandbox: bool) -> str:
+    # First attempt using Newspaper4k in a separate thread
+    newspaper_content = await asyncio.to_thread(extract_with_newspaper, url)
+    if newspaper_content:
+        return newspaper_content
+    # If Newspaper4k extraction fails, fall back to using Playwright
+    return await extract_with_playwright(url, headless, no_sandbox)
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract the main content from a webpage using Playwright, readability-lxml, and BeautifulSoup."
+        description="Extract the main content from a webpage using Newspaper4k (primary) and Playwright as fallback."
     )
     parser.add_argument("url", help="The URL of the webpage to extract content from.")
     parser.add_argument(
