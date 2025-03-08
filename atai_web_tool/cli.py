@@ -36,7 +36,8 @@ async def extract_content(url: str, headless: bool, no_sandbox: bool) -> str:
 
         try:
             # Navigate to the URL and wait until network is idle (most resources loaded)
-            await page.goto(url, wait_until="networkidle", timeout=30000)
+            # Change networkidle to load
+            await page.goto(url, wait_until="load", timeout=60000)
             
             # Additional wait to allow JavaScript to execute
             await page.wait_for_timeout(2000)
